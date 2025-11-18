@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="../engine-sdk/BimEngine.js"></script>
+    <title></title>
+  </head>
+
+  <body>
+    <div
+      id="engineContainer"
+      style="
+        color: #eee;
+        font-family: sans-serif;
+        font-size: 9pt;
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        border: none;
+        width: 100%;
+        height: 100%;
+      "
+    ></div>
+    <div class="slider" id="slider"></div>
+
+    <div id="toolbar">
+      <span class="description"> 双视口 视口同步 </span>
+      <span class="buttons">
+        <select id="sliderDirection" onchange="changeSliderDirection()">
+          <option value="vertical">上下方向</option>
+          <option value="horizontal">左右方向</option>
+        </select>
+        <button id="loadPG" onclick="mount()">打开主场景</button>
+        <button id="loadPG" onclick="mount2()">打开卷帘副场景</button>
+        <button id="loadPG" onclick="unmount()">unmount</button>
+        <button id="loadPG" onclick="compareNext()">对比点</button>
+      </span>
+    </div>
+  </body>
+  <style>
+    html,
+    body,
+    #engineContainer {
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      margin: 0;
+    }
+
+    #toolbar {
+      position: absolute;
+      background-color: #000000c8;
+      height: 20px;
+      padding-top: 8px;
+      padding-bottom: 12px;
+      padding-left: 10px;
+      padding-right: 10px;
+      top: 0;
+      /* width: 100%; */
+      width: calc(100% - 20px);
+      z-index: 999;
+    }
+
+    .description {
+      position: relative;
+      left: 0;
+      color: white;
+      font-size: 14px;
+    }
+
+    .buttons {
+      position: absolute;
+      right: 0;
+      margin-right: 10px;
+      padding-left: 10px;
+    }
+
+    .buttons button {
+      transition-duration: 0.4s;
+      background-color: transparent;
+      color: white;
+      border: 1px solid #ffffffcc;
+      border-radius: 2px;
+      height: 24px;
+      line-height: 18px;
+      margin: 0 5;
+    }
+
+    .buttons button:hover {
+      background-color: #eee;
+      /* Green */
+      color: black;
+    }
+
+    .buttons input {
+      color: white;
+      height: 10px;
+    }
+
+    .buttons label {
+      color: white;
+      font-size: 14px;
+    }
+
+     /* 滑块样式 - 水平方向（默认） */
+    .slider {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 4px;
+      height: 100%;
+      background-color: #000;
+      cursor: ew-resize;
+      z-index: 999;
+      transform: translateX(-50%);
+      display: none; /* 初始隐藏 */
+    }
+
+    /* 滑块样式 - 垂直方向 */
+    .slider.vertical {
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      cursor: ns-resize;
+      transform: translateY(-50%);
+    }
+
+    /* 滑块的拖动按钮 */
+    .slider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 16px;
+      height: 16px;
+      background-color: #fff;
+      border: 2px solid #000;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .buttons select {
+      background-color: transparent;
+      color: white;
+      border: 1px solid #ffffffcc;
+      border-radius: 2px;
+      height: 24px;
+      margin-right: 10px;
+    }
+  </style>
+  <script>
+    /** @type {import('BimEngine')} */
+    const BimEngine = window.BimEngine;
+
+    BimEngine.setBaseUrl("../engine-sdk");
+    const Viewer = BimEngine.Viewer;
+    const Project = BimEngine.Project;
+
+    let isDragging = true;
+    const slider = document.getElementById('slider');
+    let sliderDirection = 'vertical'; // 默认上下方向
+
+    // 页面加载时设置默认方向
+    document.addEventListener('DOMContentLoaded', function() {
+      if (sliderDirection === 'vertical') {
+        slider.classList.add('vertical');
+      }
+    });
+
+
+    const globalStore = {
+      firstMotorViewerInstance: undefined,
+      secondMotorViewerInstance: undefined,
+      cameraSycnEvt: undefined,
+    };
+    window.globalStore = globalStore;
+
+    class MotorViewerInstance {
+      constructor({ openId, useUE, appId, secret, baseUrl, token, container, websocketUrl, streamUrl }) {
+        this.openId = openId;
+        this.useUE = useUE;
+        this.appId = appId;
+        this.secret = secret;
+        this.baseUrl = baseUrl;
+        this.container = container;
+        this.token = token;
+        this._viewer = undefined;
+        this._project = undefined;
+        this.websocketUrl = websocketUrl;
+        this.streamUrl = streamUrl;
+      }
+
+      get viewer() {
+        return this._viewer;
+      }
+
+      set viewer(viewer) {
+        this._viewer = viewer;
+      }
+
+      get project() {
+        return this._project;
+      }
+
+      set project(project) {
+        this._project = project;
+      }
+
+      initViewer() {
+        if (this.viewer !== undefined) {
+          return this.viewer;
+        }
+        const viewer = new Viewer({
+          container: this.container,
+          baseUrl: this.baseUrl,
+          appId: this.appId,
+          secret: this.secret,
+          useUE: this.useUE,
+          token: this.token,
+          openId: this.openId,
+          openType: "project",
+          websocketUrl: this.websocketUrl,
+          streamUrl: this.streamUrl,
+        });
+        this.viewer = viewer;
+        return viewer;
+      }
+
+      async openProject() {
+        if (!this.project) {
+          const viewer = this.initViewer();
+          await viewer.Init();
+          this.viewer = viewer;
+          const curProject = await viewer.queryProject(this.openId);
+          if (curProject) {
+            await curProject.open();
+            this.project = curProject;
+          } else {
+            throw new Error("project not found");
+          }
+        } else {
+          return;
+        }
+      }
+
+      async hide({ hideModelGuidAry, hideElementIdAry, hidedirsAry }) {
+        if (this.project !== undefined) {
+          this.project.setVisibility(true);
+          if (hideModelGuidAry && hideModelGuidAry.length > 0) {
+            this.project.setVisibility(false, hideModelGuidAry);
+          }
+          if (hideElementIdAry && hideElementIdAry.length > 0) {
+            this.project.setVisibility(false, hideElementIdAry);
+          }
+          if (hidedirsAry && hidedirsAry.length > 0) {
+            this.project.setVisibility(false, hidedirsAry);
+          }
+        } else {
+          throw new Error("project not found");
+        }
+      }
+
+      closeProject() {
+        this.destroy();
+      }
+
+      destroy() {
+        this.viewer?.destroy();
+        this.viewer = undefined;
+        this.project = undefined;
+        // this.project?.destroy();
+      }
+    }
+
+    // 改变slider方向
+    function changeSliderDirection() {
+      const select = document.getElementById('sliderDirection');
+      sliderDirection = select.value;
+
+      // 更新slider的CSS类
+      if (sliderDirection === 'vertical') {
+        slider.classList.add('vertical');
+      } else {
+        slider.classList.remove('vertical');
+      }
+
+      // 如果slider已经显示，重新初始化位置
+      if (slider.style.display === 'block' && window.setSliderPosition) {
+        // 先清除所有clip-path
+        const secondViewerContainer = document.getElementById('engineContainer2');
+        if (secondViewerContainer) {
+          secondViewerContainer.style.clipPath = '';
+        }
+        if(globalStore.secondMotorViewerInstance && globalStore.secondMotorViewerInstance.viewer.isUseUE){
+          if (globalStore.secondMotorViewerInstance.viewer.ueViewer && globalStore.secondMotorViewerInstance.viewer.ueViewer.ueContainer) {
+            globalStore.secondMotorViewerInstance.viewer.ueViewer.ueContainer.style.clipPath = '';
+          }
+        }
+        
+        // 重新设置位置
+        const container = document.body;
+        const rect = container.getBoundingClientRect();
+        if (sliderDirection === 'vertical') {
+          window.setSliderPosition(rect.top + rect.height / 2, true);
+        } else {
+          window.setSliderPosition(rect.left + rect.width / 2, false);
+        }
+      }
+    }
+
+    function generateSecondViewerHtml(
+      firstViewerContainer,
+      secondViewerContainer
+    ) {
+      if (
+        secondViewerContainer &&
+        !!document.getElementById(secondViewerContainer)
+      ) {
+        const firstViewerContainerEle =
+          document.getElementById(firstViewerContainer);
+        if (firstViewerContainerEle) {
+          firstViewerContainerEle.style.cssText =
+            "width: 100%;height: 100%;position: absolute;left: 0;top: 0;z-index: 1;";
+        }
+        const secVieEle = document.getElementById(secondViewerContainer);
+        if (secVieEle) {
+          secVieEle.style.cssText =
+            "width: 100%;height: 100%;position: absolute;left: 0;top: 0;z-index: 2;";
+        }
+      } else {
+        const firstViewerContainerEle =
+          document.getElementById(firstViewerContainer);
+        if (firstViewerContainerEle) {
+          firstViewerContainerEle.style.cssText =
+            "width: 100%;height: 100%;position: absolute;left: 0;top: 0;z-index: 1;";
+        }
+        const secViewerContainerEle = document.createElement("div");
+        secViewerContainerEle.style.cssText =
+          "color: #eee;font-family: sans-serif;font-size: 9pt;display: block;position: absolute;top: 0;left: 0;border: none; width: 100%;height: 100%; z-index: 2;";
+        secViewerContainerEle.id = secondViewerContainer;
+        document.body.append(secViewerContainerEle);
+      }
+    }
+
+    function adjustViewerCss(viewer1, viewer2) {
+      if (
+        viewer1.viewer.ueViewer &&
+        viewer1.isUseUE &&
+        viewer1.viewer.ueViewer.ueContainer
+      ) {
+        viewer1.viewer.ueViewer.ueContainer.style.width = "100%";
+      }
+      if (
+        viewer2.viewer.ueViewer &&
+        viewer2.isUseUE &&
+        viewer2.viewer.ueViewer.ueContainer
+      ) {
+        viewer2.viewer.ueViewer.ueContainer.style.width = "100%";
+        viewer2.viewer.ueViewer.ueContainer.style.right = "0px";
+        viewer2.viewer.ueViewer.ueContainer.style.left = "auto";
+      }
+    }
+
+    function restoreViewerCss(viewer1, viewer2) {
+      viewer1.viewer.container.style.width = "100%";
+      if (
+        viewer1.viewer.ueViewer &&
+        viewer1.isUseUE &&
+        viewer1.viewer.ueViewer.ueContainer
+      ) {
+        viewer1.viewer.ueViewer.ueContainer.style.width = "100%";
+      }
+      if (viewer2.viewer && viewer2.viewer.container) {
+        viewer2.viewer.container.style.width = "0";
+        viewer2.viewer.container.style.zIndex = "-999";
+      }
+      if (
+        viewer2.viewer.ueViewer &&
+        viewer2.isUseUE &&
+        viewer2.viewer.ueViewer.ueContainer
+      ) {
+        viewer2.viewer.ueViewer.ueContainer.style.width = "100%";
+        viewer2.viewer.ueViewer.ueContainer.remove();
+      }
+    }
+
+
+    function registerSliderEvent(){
+
+      const container = document.body;
+
+      // 设置滑块
+      // 获取容器的边界
+      function getContainerRect() {
+        return container.getBoundingClientRect();
+      }
+
+      // 设置滑块位置并更新 clip-path
+      function setSliderPosition(clientPos, isVertical = null) {
+        const rect = getContainerRect();
+        const isVerticalDirection = isVertical !== null ? isVertical : sliderDirection === 'vertical';
+
+        let offset, percentage;
+
+        if (isVerticalDirection) {
+          // 垂直方向
+          let offsetY = clientPos - rect.top;
+          if (offsetY < 0) offsetY = 0;
+          if (offsetY > rect.height) offsetY = rect.height;
+          percentage = (offsetY / rect.height) * 100;
+          slider.style.top = `${percentage}%`;
+
+          // 更新第二个viewer的 clip-path，让它只显示下边部分
+          const secondViewerContainer = document.getElementById('engineContainer2');
+          if (secondViewerContainer) {
+            secondViewerContainer.style.clipPath = `inset(${percentage}% 0 0 0)`;
+          }
+
+          // 如果第二个viewer是 UE
+          if(globalStore.secondMotorViewerInstance && globalStore.secondMotorViewerInstance.viewer.isUseUE){
+            if (globalStore.secondMotorViewerInstance.viewer.ueViewer && globalStore.secondMotorViewerInstance.viewer.ueViewer.ueContainer) {
+              globalStore.secondMotorViewerInstance.viewer.ueViewer.ueContainer.style.clipPath = `inset(${percentage}% 0 0 0)`;
+            }
+          }
+        } else {
+          // 水平方向
+          let offsetX = clientPos - rect.left;
+          if (offsetX < 0) offsetX = 0;
+          if (offsetX > rect.width) offsetX = rect.width;
+          percentage = (offsetX / rect.width) * 100;
+          slider.style.left = `${percentage}%`;
+
+          // 更新第二个viewer的 clip-path，让它只显示右边部分
+          const secondViewerContainer = document.getElementById('engineContainer2');
+          if (secondViewerContainer) {
+            secondViewerContainer.style.clipPath = `inset(0 0 0 ${percentage}%)`;
+          }
+
+          // 如果第二个viewer是 UE
+          if(globalStore.secondMotorViewerInstance && globalStore.secondMotorViewerInstance.viewer.isUseUE){
+            if (globalStore.secondMotorViewerInstance.viewer.ueViewer && globalStore.secondMotorViewerInstance.viewer.ueViewer.ueContainer) {
+              globalStore.secondMotorViewerInstance.viewer.ueViewer.ueContainer.style.clipPath = `inset(0 0 0 ${percentage}%)`;
+            }
+          }
+        }
+      }
+
+      // 全局暴露setSliderPosition函数
+      window.setSliderPosition = setSliderPosition;
+
+      // 使用 Pointer Events 和 Pointer Capture
+      slider.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        isDragging = true;
+        // 捕获指针事件，确保后续的 pointermove 和 pointerup 事件能够在此元素上捕获到
+        slider.setPointerCapture(e.pointerId);
+      });
+
+      // 处理指针移动
+      slider.addEventListener('pointermove', function(e) {
+        if (!isDragging) return;
+        if (sliderDirection === 'vertical') {
+          setSliderPosition(e.clientY);
+        } else {
+          setSliderPosition(e.clientX);
+        }
+      });
+
+      // 处理指针释放
+      slider.addEventListener('pointerup', function(e) {
+        if (isDragging) {
+          isDragging = false;
+          slider.releasePointerCapture(e.pointerId);
+        }
+      });
+
+      // 处理指针取消（如浏览器中断事件）
+      slider.addEventListener('pointercancel', function(e) {
+        if (isDragging) {
+          isDragging = false;
+          slider.releasePointerCapture(e.pointerId);
+        }
+      });
+
+      // 初始化滑块位置为50%
+      const rect = container.getBoundingClientRect();
+      if (sliderDirection === 'vertical') {
+        setSliderPosition(rect.top + rect.height / 2);
+      } else {
+        setSliderPosition(rect.left + rect.width / 2);
+      }
+    }
+
+
+      const isUseUE = false;
+
+    // vue 进入 page
+    async function mount() {
+      // project1
+      const baseUrl = 'https://szsp.suitbim.com.cn:7201'
+      const appId = 'cda91b54847a41dd824dc8770d58cfc9'
+      const secret = '7300a518eac34f2bad99fc88726536b8'
+      const projectId = '6b59b9a0f2c6414d871d0752551914e9'
+      const firstViewerContainerId = "engineContainer";
+      const secondViewerContainerId = "engineContainer2";
+
+      const viewerConfig1 = {
+        baseUrl,
+        appId,
+        secret,
+        container: firstViewerContainerId,
+        openId: projectId,
+        openType: "project",
+        useUE: isUseUE,
+        // websocketUrl: "ws://192.168.10.24:10009",
+        // streamUrl: "http://192.168.10.24:10010/",
+      };
+
+      // 第一个 viewer
+      const firstMotorViewerInstance = globalStore.firstMotorViewerInstance
+        ? globalStore.firstMotorViewerInstance
+        : new MotorViewerInstance(viewerConfig1);
+      const firstViewer = firstMotorViewerInstance.initViewer();
+      globalStore.firstMotorViewerInstance = firstMotorViewerInstance;
+
+      if (isUseUE) {
+        await firstMotorViewerInstance.openProject();
+      } else {
+        await firstMotorViewerInstance.openProject();
+      }
+
+    }
+
+     // vue 打开卷帘
+    async function mount2() {
+      // 优先显示slider并设置方向
+      if (sliderDirection === 'vertical') {
+        slider.classList.add('vertical');
+      } else {
+        slider.classList.remove('vertical');
+      }
+      slider.style.display = 'block';
+
+     // project1
+      const baseUrl = 'https://szsp.suitbim.com.cn:7201'
+      const appId = 'cda91b54847a41dd824dc8770d58cfc9'
+      const secret = '7300a518eac34f2bad99fc88726536b8'
+      const projectId2 = 'a22756c408d34a9c8d508e0b198cfe91'
+
+      const firstViewerContainerId = "engineContainer";
+      const secondViewerContainerId = "engineContainer2";
+
+      const viewerConfig2 = {
+        baseUrl, 
+        appId,
+        secret,
+        container: secondViewerContainerId,
+        openId: projectId2,
+        openType: "project",
+        useUE: isUseUE,
+        // websocketUrl: "ws://192.168.10.24:10008",
+        // streamUrl: "http://192.168.10.24:10007/",
+      };
+
+      // 调整第一个 viewer css  以及处理第二个 html
+      generateSecondViewerHtml(firstViewerContainerId, secondViewerContainerId);
+      const firstViewer = globalStore.firstMotorViewerInstance.viewer
+
+      // 第二个 viewer
+      const secondMotorViewerInstance = new MotorViewerInstance(viewerConfig2);
+      const secondViewer = secondMotorViewerInstance.initViewer();
+      globalStore.secondMotorViewerInstance = secondMotorViewerInstance;
+
+      const interval = setInterval(() => {
+        adjustViewerCss(firstViewer, secondViewer);
+      }, 50);
+
+      if (isUseUE) {
+        await secondMotorViewerInstance.openProject();
+        // adjustViewerCss(firstViewer, secondViewer);
+      } else {
+        await secondMotorViewerInstance.openProject();
+      }
+      clearInterval(interval);
+
+
+      globalStore.cameraSycnEvt = syncCameras(firstViewer, secondViewer);
+      globalStore.cameraSycnEvt.addListeners();
+
+      registerSliderEvent();
+    }
+
+    // vue 离开 page
+    async function unmount() {
+      if (globalStore.cameraSycnEvt) {
+        globalStore.cameraSycnEvt.removeListeners();
+        globalStore.cameraSycnEvt = undefined;
+      }
+
+      if (globalStore.secondMotorViewerInstance) {
+        if (
+          globalStore.firstMotorViewerInstance &&
+          globalStore.secondMotorViewerInstance.viewer &&
+          globalStore.firstMotorViewerInstance.viewer
+        ) {
+          restoreViewerCss(
+            globalStore.firstMotorViewerInstance.viewer,
+            globalStore.secondMotorViewerInstance.viewer
+          );
+        }
+        globalStore.secondMotorViewerInstance.destroy();
+        globalStore.secondMotorViewerInstance = undefined;
+        if(globalStore.firstMotorViewerInstance){
+          globalStore.firstMotorViewerInstance.destroy();
+          globalStore.firstMotorViewerInstance = undefined;
+        }
+
+        // 隐藏slider
+        slider.style.display = 'none';
+      }
+
+      compareItemIdx = 0;
+    }
+
+    // 这个方法如果有 lodash 可以直接使用 lodash的 _.debounce
+    function debounce(func, wait) {
+      let timeout;
+      return function (...args) {
+        const context = this;
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+        timeout = window.setTimeout(() => {
+          timeout = null;
+          func.apply(context, args);
+        }, wait);
+      };
+    }
+
+
+
+    function syncCameras(viewer1, viewer2) {
+      let isSyncing = false;
+      let handlers = [];
+
+      function onViewChangedCesium(sourceViewer, targetViewer) {
+        if (isSyncing) {
+          return;
+        }
+        isSyncing = true;
+        const sourceVp = sourceViewer.viewer.camera.getViewPosition();
+        if (sourceVp) {
+          targetViewer.viewer.camera.setViewToViewPosition(sourceVp);
+        }
+        isSyncing = false;
+      }
+
+      async function onViewChanged(sourceViewer, targetViewer) {
+        if (isSyncing) {
+          return;
+        }
+        console.log(1)
+        console.log(2)
+        isSyncing = true;
+        try {
+          const sourceVp =
+            await sourceViewer.viewer.camera.getViewPositionAdapter();
+          if (sourceVp) {
+            targetViewer.viewer.camera.setViewToViewPosition(sourceVp);
+          }
+        } catch (error) {
+          console.error("Error syncing cameras:", error);
+        } finally {
+          isSyncing = false;
+        }
+      }
+
+      const debouncedOnViewChanged = debounce(
+        async (sourceViewer, targetViewer) => {
+          await onViewChanged(sourceViewer, targetViewer);
+        },
+        50
+      );
+
+      function addListeners() {
+        if (viewer1.isUseUE && viewer2.isUseUE) {
+          // 双 UE
+          const handler1 = () => debouncedOnViewChanged(viewer1, viewer2);
+          const handler2 = () => debouncedOnViewChanged(viewer2, viewer1);
+          viewer1.viewer.camera.cameraChanged.addEventListener(handler1);
+          viewer2.viewer.camera.cameraChanged.addEventListener(handler2);
+          handlers.push({ viewer: viewer1, handler: handler1 });
+          handlers.push({ viewer: viewer2, handler: handler2 });
+          return
+        }
+
+        if(viewer1.isUseUE && !viewer2.isUseUE){
+          // viewer1 是 UE     viewer2 是 cesium
+          const handler1 = () => debouncedOnViewChanged(viewer1, viewer2);
+          const handler2 = () => onViewChangedCesium(viewer2, viewer1);
+          viewer1.viewer.camera.cameraChanged.addEventListener(handler1);
+          viewer2.viewer.camera.cameraChanged.addEventListener(handler2);
+          handlers.push({ viewer: viewer1, handler: handler1 });
+          handlers.push({ viewer: viewer2, handler: handler2 });
+          return
+        }
+
+        if(!viewer1.isUseUE && viewer2.isUseUE){
+          // viewer1 是 cesium    viewer2 是 ue
+          const handler1 = () => onViewChangedCesium(viewer1, viewer2);
+          const handler2 = () => debouncedOnViewChanged(viewer2, viewer1);
+          viewer1.viewer.camera.cameraChanged.addEventListener(handler1);
+          viewer2.viewer.camera.cameraChanged.addEventListener(handler2);
+          handlers.push({ viewer: viewer1, handler: handler1 });
+          handlers.push({ viewer: viewer2, handler: handler2 });
+          return
+        }
+
+        console.log(' here --- ')
+        // 双 cesium
+        const handler1 = () => onViewChangedCesium(viewer1, viewer2);
+        const handler2 = () => onViewChangedCesium(viewer2, viewer1);
+        viewer1.viewer.camera.cameraChanged.addEventListener(handler1);
+        viewer2.viewer.camera.cameraChanged.addEventListener(handler2);
+        handlers.push({ viewer: viewer1, handler: handler1 });
+        handlers.push({ viewer: viewer2, handler: handler2 });
+
+      }
+
+      function removeListeners() {
+        handlers.forEach(({ viewer, handler }) => {
+          viewer.viewer.camera.cameraChanged.removeEventListener(handler);
+        });
+        handlers = []; // 清空handlers列表
+      }
+
+      // 提供外部访问的方法来添加和移除监听器
+      return {
+        addListeners,
+        removeListeners,
+      };
+    }
+  </script>
+</html>

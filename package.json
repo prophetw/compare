@@ -1,0 +1,12 @@
+{
+  "name": "compare-monorepo",
+  "private": true,
+  "packageManager": "pnpm@8.15.6",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:server": "pnpm --filter server dev",
+    "build": "pnpm --filter frontend build && pnpm sync:static && pnpm --filter server build",
+    "sync:static": "node scripts/sync-static.mjs"
+  }
+}

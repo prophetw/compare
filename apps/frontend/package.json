@@ -1,0 +1,25 @@
+{
+  "name": "frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "BimEngine": "workspace:^1.0.0",
+    "axios": "^1.6.7",
+    "vue": "^3.4.15",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/tsconfig": "^0.5.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "vite-plugin-static-copy": "^3.1.4"
+  }
+}
