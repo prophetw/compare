@@ -4,6 +4,9 @@
   "compilerOptions": {
     "composite": true,
     "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "types": ["vite/client"]
   }
 }
