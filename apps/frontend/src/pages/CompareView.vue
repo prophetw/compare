@@ -17,7 +17,7 @@
     </div>
 
     <div class="toolbar">
-      <span class="description">双视口 视口同步</span>
+      <span class="description">{{ appDisplayName }} · 双视口视口同步</span>
       <span class="controls">
         <select v-model="sliderDirection" :disabled="!sliderVisible">
           <option value="vertical">上下方向</option>
@@ -43,7 +43,9 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { defaultViewerConfig, useViewerConfig } from '@/stores/viewerConfig';
 
 type BimEngineModule = typeof import('BimEngine');
 type BimEngineNamespace = BimEngineModule['default'];
@@ -54,13 +56,28 @@ declare global {
   }
 }
 
-const ENGINE_SCRIPT_SRC = '/engine-sdk/BimEngine.js';
-const DEFAULT_BASE_URL = 'https://szsp.suitbim.com.cn:7201';
-const APP_ID = 'cda91b54847a41dd824dc8770d58cfc9';
-const SECRET = '7300a518eac34f2bad99fc88726536b8';
 const PRIMARY_PROJECT_ID = '6b59b9a0f2c6414d871d0752551914e9';
 const SECONDARY_PROJECT_ID = 'a22756c408d34a9c8d508e0b198cfe91';
 const USE_UE = false;
+
+const router = useRouter();
+const { config: viewerConfig, confirmed } = useViewerConfig();
+
+if (!confirmed.value) {
+  router.replace({ name: 'config' });
+}
+
+const fallbackServerUrl = defaultViewerConfig.serverUrl;
+const fallbackSdkBase = defaultViewerConfig.sdkUrl || '/engine-sdk';
+const fallbackAppId = defaultViewerConfig.appId;
+const fallbackSecret = defaultViewerConfig.secret;
+
+const serverBaseUrl = computed(() => normalizeBaseUrl(viewerConfig.value.serverUrl, fallbackServerUrl));
+const sdkBaseUrl = computed(() => normalizeBaseUrl(viewerConfig.value.sdkUrl, fallbackSdkBase));
+const engineScriptSrc = computed(() => `${sdkBaseUrl.value}/BimEngine.js`);
+const normalizedAppId = computed(() => ensureValue(viewerConfig.value.appId, fallbackAppId));
+const normalizedSecret = computed(() => ensureValue(viewerConfig.value.secret, fallbackSecret));
+const appDisplayName = computed(() => ensureValue(viewerConfig.value.appName, defaultViewerConfig.appName));
 
 const statusMessage = ref('');
 const sliderDirection = ref<'vertical' | 'horizontal'>('vertical');
@@ -166,43 +183,56 @@ type MotorViewerOptions = {
   streamUrl?: string;
 };
 
+function ensureValue(value: string | undefined, fallback: string) {
+  const trimmed = value?.trim() ?? '';
+  return trimmed || fallback;
+}
+
+function normalizeBaseUrl(value: string | undefined, fallback: string) {
+  const ensured = ensureValue(value, fallback);
+  if (ensured === '/') {
+    return ensured;
+  }
+  return ensured.replace(/\/+$/, '');
+}
+
 async function ensureEngine() {
   if (cachedEngine) {
     return cachedEngine;
   }
+  const baseUrl = sdkBaseUrl.value;
   if (window.BimEngine) {
     cachedEngine = window.BimEngine;
-    cachedEngine.setBaseUrl('/engine-sdk');
+    cachedEngine.setBaseUrl(baseUrl);
     return cachedEngine;
   }
   if (!enginePromise) {
+    const scriptSrc = engineScriptSrc.value;
     enginePromise = new Promise<BimEngineNamespace>((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>('script[data-bimengine]');
-      if (existing) {
-        existing.addEventListener('load', () => {
-          if (window.BimEngine) {
-            window.BimEngine.setBaseUrl('/engine-sdk');
-            cachedEngine = window.BimEngine;
-            resolve(window.BimEngine);
-          }
-        });
-        existing.addEventListener('error', () => reject(new Error('BimEngine 脚本加载失败')));
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = ENGINE_SCRIPT_SRC;
-      script.async = true;
-      script.dataset.bimengine = 'true';
-      script.onload = () => {
+      const handleLoad = () => {
         if (window.BimEngine) {
-          window.BimEngine.setBaseUrl('/engine-sdk');
+          window.BimEngine.setBaseUrl(baseUrl);
           cachedEngine = window.BimEngine;
           resolve(window.BimEngine);
         } else {
-          reject(new Error('无法初始化 BimEngine')); 
+          reject(new Error('无法初始化 BimEngine'));
         }
       };
-      script.onerror = () => reject(new Error('BimEngine 脚本加载失败'));
+      const handleError = () => reject(new Error('BimEngine 脚本加载失败'));
+      const existing =
+        document.querySelector<HTMLScriptElement>(`script[data-bimengine="${scriptSrc}"]`) ??
+        document.querySelector<HTMLScriptElement>('script[data-bimengine]');
+      if (existing) {
+        existing.addEventListener('load', handleLoad, { once: true });
+        existing.addEventListener('error', handleError, { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = scriptSrc;
+      script.async = true;
+      script.dataset.bimengine = scriptSrc;
+      script.onload = handleLoad;
+      script.onerror = handleError;
       document.head.appendChild(script);
     }).catch((error) => {
       enginePromise = null;
@@ -223,9 +253,9 @@ async function mountPrimary() {
     let instance = globalStore.firstMotorViewerInstance;
     if (!instance) {
       instance = new MotorViewerInstance(engine, {
-        baseUrl: DEFAULT_BASE_URL,
-        appId: APP_ID,
-        secret: SECRET,
+        baseUrl: serverBaseUrl.value,
+        appId: normalizedAppId.value,
+        secret: normalizedSecret.value,
         openId: PRIMARY_PROJECT_ID,
         container: 'engineContainer',
         useUE: USE_UE
@@ -258,9 +288,9 @@ async function mountSecondary() {
       return;
     }
     const instance = new MotorViewerInstance(engine, {
-      baseUrl: DEFAULT_BASE_URL,
-      appId: APP_ID,
-      secret: SECRET,
+      baseUrl: serverBaseUrl.value,
+      appId: normalizedAppId.value,
+      secret: normalizedSecret.value,
       openId: SECONDARY_PROJECT_ID,
       container: 'engineContainer2',
       useUE: USE_UE

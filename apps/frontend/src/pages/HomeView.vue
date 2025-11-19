@@ -16,9 +16,13 @@ import { ref } from 'vue';
 import LoginForm from '@/components/LoginForm.vue';
 
 const message = ref('');
+const emit = defineEmits<{
+  'login-success': [payload: { token: string; user: { email: string } }];
+}>();
 
 function handleSuccess(payload: { token: string; user: { email: string } }) {
   message.value = `欢迎 ${payload.user.email}，令牌：${payload.token}`;
+  emit('login-success', payload);
 }
 </script>
 
