@@ -1,6 +1,6 @@
 <template>
   <section class="compare-page">
-    <div class="viewer-stack" ref="viewerHostRef">
+    <div class="viewer-stack" :class="viewerStackClasses" ref="viewerHostRef">
       <div id="engineContainer" class="viewer primary"></div>
       <div
         id="engineContainer2"
@@ -9,7 +9,7 @@
         :style="sliderVisible ? undefined : secondaryHiddenStyle"
       ></div>
       <div
-        v-show="sliderVisible"
+        v-if="isOverlayMode && sliderVisible"
         ref="sliderRef"
         class="slider"
         :class="{ vertical: sliderDirection === 'vertical' }"
@@ -19,7 +19,11 @@
     <div class="toolbar">
       <span class="description">{{ appDisplayName }} · 双视口视口同步</span>
       <span class="controls">
-        <select v-model="sliderDirection" :disabled="!sliderVisible">
+        <select v-model="comparisonMode">
+          <option value="overlay">卷帘模式</option>
+          <option value="split">分屏模式</option>
+        </select>
+        <select v-model="sliderDirection" :disabled="isOverlayMode && !sliderVisible">
           <option value="vertical">上下方向</option>
           <option value="horizontal">左右方向</option>
         </select>
@@ -45,16 +49,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import BimEngine from 'BimEngine';
 import { defaultViewerConfig, useViewerConfig } from '@/stores/viewerConfig';
 
-type BimEngineModule = typeof import('BimEngine');
-type BimEngineNamespace = BimEngineModule['default'];
-
-declare global {
-  interface Window {
-    BimEngine?: BimEngineNamespace;
-  }
-}
+type BimEngineNamespace = typeof BimEngine;
 
 const PRIMARY_PROJECT_ID = '6b59b9a0f2c6414d871d0752551914e9';
 const SECONDARY_PROJECT_ID = 'a22756c408d34a9c8d508e0b198cfe91';
@@ -68,22 +66,28 @@ if (!confirmed.value) {
 }
 
 const fallbackServerUrl = defaultViewerConfig.serverUrl;
-const fallbackSdkBase = defaultViewerConfig.sdkUrl || '/engine-sdk';
 const fallbackAppId = defaultViewerConfig.appId;
 const fallbackSecret = defaultViewerConfig.secret;
+const STATIC_SDK_BASE = './static';
 
 const serverBaseUrl = computed(() => normalizeBaseUrl(viewerConfig.value.serverUrl, fallbackServerUrl));
-const sdkBaseUrl = computed(() => normalizeBaseUrl(viewerConfig.value.sdkUrl, fallbackSdkBase));
-const engineScriptSrc = computed(() => `${sdkBaseUrl.value}/BimEngine.js`);
 const normalizedAppId = computed(() => ensureValue(viewerConfig.value.appId, fallbackAppId));
 const normalizedSecret = computed(() => ensureValue(viewerConfig.value.secret, fallbackSecret));
 const appDisplayName = computed(() => ensureValue(viewerConfig.value.appName, defaultViewerConfig.appName));
 
 const statusMessage = ref('');
 const sliderDirection = ref<'vertical' | 'horizontal'>('vertical');
+const comparisonMode = ref<'overlay' | 'split'>('overlay');
+const isOverlayMode = computed(() => comparisonMode.value === 'overlay');
 const sliderVisible = ref(false);
 const sliderPercent = ref(50);
 const secondaryHiddenStyle = Object.freeze({ clipPath: 'none' });
+const viewerStackClasses = computed(() => ({
+  overlay: isOverlayMode.value,
+  split: !isOverlayMode.value,
+  'split-vertical': !isOverlayMode.value && sliderDirection.value === 'vertical',
+  'split-horizontal': !isOverlayMode.value && sliderDirection.value === 'horizontal'
+}));
 
 const viewerHostRef = ref<HTMLDivElement | null>(null);
 const sliderRef = ref<HTMLDivElement | null>(null);
@@ -95,8 +99,7 @@ const loading = reactive({
   teardown: false
 });
 
-let enginePromise: Promise<BimEngineNamespace> | null = null;
-let cachedEngine: BimEngineNamespace | null = null;
+let engineBaseApplied: string | null = null;
 
 const globalStore = {
   firstMotorViewerInstance: null as MotorViewerInstance | null,
@@ -105,8 +108,8 @@ const globalStore = {
 };
 
 class MotorViewerInstance {
-  public viewer?: InstanceType<BimEngineModule['Viewer']>;
-  public project?: InstanceType<BimEngineModule['Project']>;
+  public viewer?: InstanceType<BimEngineNamespace['Viewer']>;
+  public project?: InstanceType<BimEngineNamespace['Project']>;
   public readonly isUseUE: boolean;
   public readonly openId: string;
   private readonly container: string;
@@ -196,50 +199,14 @@ function normalizeBaseUrl(value: string | undefined, fallback: string) {
   return ensured.replace(/\/+$/, '');
 }
 
-async function ensureEngine() {
-  if (cachedEngine) {
-    return cachedEngine;
+
+function ensureEngine() {
+  const baseUrl = STATIC_SDK_BASE;
+  if (engineBaseApplied !== baseUrl) {
+    BimEngine.setBaseUrl(baseUrl);
+    engineBaseApplied = baseUrl;
   }
-  const baseUrl = sdkBaseUrl.value;
-  if (window.BimEngine) {
-    cachedEngine = window.BimEngine;
-    cachedEngine.setBaseUrl(baseUrl);
-    return cachedEngine;
-  }
-  if (!enginePromise) {
-    const scriptSrc = engineScriptSrc.value;
-    enginePromise = new Promise<BimEngineNamespace>((resolve, reject) => {
-      const handleLoad = () => {
-        if (window.BimEngine) {
-          window.BimEngine.setBaseUrl(baseUrl);
-          cachedEngine = window.BimEngine;
-          resolve(window.BimEngine);
-        } else {
-          reject(new Error('无法初始化 BimEngine'));
-        }
-      };
-      const handleError = () => reject(new Error('BimEngine 脚本加载失败'));
-      const existing =
-        document.querySelector<HTMLScriptElement>(`script[data-bimengine="${scriptSrc}"]`) ??
-        document.querySelector<HTMLScriptElement>('script[data-bimengine]');
-      if (existing) {
-        existing.addEventListener('load', handleLoad, { once: true });
-        existing.addEventListener('error', handleError, { once: true });
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = scriptSrc;
-      script.async = true;
-      script.dataset.bimengine = scriptSrc;
-      script.onload = handleLoad;
-      script.onerror = handleError;
-      document.head.appendChild(script);
-    }).catch((error) => {
-      enginePromise = null;
-      throw error;
-    });
-  }
-  return enginePromise;
+  return BimEngine;
 }
 
 async function mountPrimary() {
@@ -249,7 +216,7 @@ async function mountPrimary() {
   try {
     loading.primary = true;
     statusMessage.value = '正在打开主场景…';
-    const engine = await ensureEngine();
+    const engine = ensureEngine();
     let instance = globalStore.firstMotorViewerInstance;
     if (!instance) {
       instance = new MotorViewerInstance(engine, {
@@ -282,7 +249,7 @@ async function mountSecondary() {
   try {
     loading.secondary = true;
     statusMessage.value = '正在打开卷帘副场景…';
-    const engine = await ensureEngine();
+    const engine = ensureEngine();
     if (globalStore.secondMotorViewerInstance?.project) {
       statusMessage.value = '副场景已打开';
       return;
@@ -371,6 +338,11 @@ let resizeCleanup: (() => void) | null = null;
 let isDragging = false;
 
 async function enableSlider() {
+  if (!isOverlayMode.value) {
+    sliderVisible.value = false;
+    clearClipPaths();
+    return;
+  }
   sliderVisible.value = true;
   sliderPercent.value = 50;
   await nextTick();
@@ -648,6 +620,16 @@ watch(sliderDirection, async () => {
   refreshSliderPosition();
 });
 
+watch(comparisonMode, async (mode) => {
+  if (mode === 'overlay') {
+    if (globalStore.secondMotorViewerInstance?.project) {
+      await enableSlider();
+    }
+  } else {
+    disableSlider();
+  }
+});
+
 onBeforeUnmount(async () => {
   sliderEventsCleanup?.();
   resizeCleanup?.();
@@ -667,9 +649,26 @@ onBeforeUnmount(async () => {
 }
 
 .viewer-stack {
-  position: relative;
   width: 100%;
   height: 100%;
+}
+
+.viewer-stack.overlay {
+  position: relative;
+}
+
+.viewer-stack.split {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-stack.split-vertical {
+  flex-direction: column;
+}
+
+.viewer-stack.split-horizontal {
+  flex-direction: row;
 }
 
 .viewer {
@@ -681,12 +680,32 @@ onBeforeUnmount(async () => {
   border: none;
 }
 
+.viewer-stack.split .viewer {
+  position: relative;
+  flex: 1 1 0;
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-stack.split-vertical .viewer {
+  height: 50%;
+}
+
+.viewer-stack.split-horizontal .viewer {
+  width: 50%;
+}
+
 .viewer.primary {
   z-index: 1;
 }
 
 .viewer.secondary {
   z-index: 2;
+}
+
+.viewer-stack.split .viewer.primary,
+.viewer-stack.split .viewer.secondary {
+  z-index: 1;
 }
 
 .slider {

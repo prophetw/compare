@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
         targets: [
           {
             src: path.resolve(engineSdkDir, '**/*'),
-            dest: 'engine-sdk'
+            dest: 'static'
           }
         ]
       })
