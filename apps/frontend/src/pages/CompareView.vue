@@ -27,12 +27,42 @@
           <option value="vertical">上下方向</option>
           <option value="horizontal">左右方向</option>
         </select>
-        <button type="button" @click="mountPrimary" :disabled="loading.primary">
-          {{ loading.primary ? '加载主场景…' : '打开主场景' }}
-        </button>
-        <button type="button" @click="mountSecondary" :disabled="loading.secondary">
-          {{ loading.secondary ? '加载卷帘副场景…' : '打开卷帘副场景' }}
-        </button>
+
+        <div class="toggle-group">
+          <label :class="{ active: projectType === 'model' }">
+            <input type="radio" v-model="projectType" value="model" /> 模型列表
+          </label>
+          <label :class="{ active: projectType === 'scene' }">
+            <input type="radio" v-model="projectType" value="scene" /> 场景列表
+          </label>
+        </div>
+        
+        <div class="group">
+          <SearchableSelect
+            v-model="selectedPrimaryId"
+            :items="projectOptions"
+            :loading="loading.projects"
+            placeholder="选择主场景"
+            @search="handleProjectSearch"
+          />
+          <button type="button" @click="mountPrimary" :disabled="loading.primary || !selectedPrimaryId">
+            {{ loading.primary ? '加载...' : '加载' }}
+          </button>
+        </div>
+
+        <div class="group">
+          <SearchableSelect
+            v-model="selectedSecondaryId"
+            :items="projectOptions"
+            :loading="loading.projects"
+            placeholder="选择副场景"
+            @search="handleProjectSearch"
+          />
+          <button type="button" @click="mountSecondary" :disabled="loading.secondary || !selectedSecondaryId">
+            {{ loading.secondary ? '加载...' : '加载' }}
+          </button>
+        </div>
+
         <button type="button" @click="handleTeardown" :disabled="loading.teardown">
           {{ loading.teardown ? '卸载中…' : '卸载' }}
         </button>
@@ -47,15 +77,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import BimEngine from 'BimEngine';
 import { defaultViewerConfig, useViewerConfig } from '@/stores/viewerConfig';
+import { fetchToken, fetchProjects, getPreviewImageUrl, type ProjectItem } from '@/services/projectService';
+import SearchableSelect, { type SelectItem } from '@/components/SearchableSelect.vue';
 
 type BimEngineNamespace = typeof BimEngine;
 
-const PRIMARY_PROJECT_ID = '6b59b9a0f2c6414d871d0752551914e9';
-const SECONDARY_PROJECT_ID = 'a22756c408d34a9c8d508e0b198cfe91';
 const USE_UE = false;
 
 const router = useRouter();
@@ -96,7 +126,22 @@ const secondContainerRef = ref<HTMLDivElement | null>(null);
 const loading = reactive({
   primary: false,
   secondary: false,
-  teardown: false
+  teardown: false,
+  projects: false
+});
+
+const projectType = ref<'model' | 'scene'>('model');
+const projects = ref<ProjectItem[]>([]);
+const accessToken = ref('');
+const selectedPrimaryId = ref('');
+const selectedSecondaryId = ref('');
+
+const projectOptions = computed<SelectItem[]>(() => {
+  return projects.value.map(p => ({
+    label: p.name,
+    value: p.guid,
+    image: getPreviewImageUrl(serverBaseUrl.value, p.previewImage)
+  }));
 });
 
 let engineBaseApplied: string | null = null;
@@ -119,6 +164,7 @@ class MotorViewerInstance {
   private readonly token?: string;
   private readonly websocketUrl?: string;
   private readonly streamUrl?: string;
+  private readonly projectType: 'model' | 'scene';
 
   constructor(private readonly engine: BimEngineNamespace, options: MotorViewerOptions) {
     this.openId = options.openId;
@@ -130,6 +176,7 @@ class MotorViewerInstance {
     this.token = options.token;
     this.websocketUrl = options.websocketUrl;
     this.streamUrl = options.streamUrl;
+    this.projectType = options.projectType || 'model';
   }
 
   initViewer() {
@@ -158,11 +205,25 @@ class MotorViewerInstance {
     }
     const viewer = this.initViewer();
     await viewer.Init();
-    const project = await viewer.queryProject(this.openId);
+    
+    let project;
+    if (this.projectType === 'model') {
+      // Model Project opening logic
+      const result = await viewer.openModelProject(this.openId, true, this.token || '');
+      if (result) {
+        project = result.project;
+      }
+    } else {
+      // Scene Project opening logic
+      project = await viewer.queryProject(this.openId);
+      if (project) {
+        await project.open();
+      }
+    }
+
     if (!project) {
       throw new Error('未找到项目');
     }
-    await project.open();
     this.project = project;
     return project;
   }
@@ -184,6 +245,7 @@ type MotorViewerOptions = {
   token?: string;
   websocketUrl?: string;
   streamUrl?: string;
+  projectType?: 'model' | 'scene';
 };
 
 function ensureValue(value: string | undefined, fallback: string) {
@@ -213,6 +275,10 @@ async function mountPrimary() {
   if (loading.primary) {
     return;
   }
+  if (!selectedPrimaryId.value) {
+    statusMessage.value = '请先选择主场景';
+    return;
+  }
   try {
     loading.primary = true;
     statusMessage.value = '正在打开主场景…';
@@ -223,9 +289,10 @@ async function mountPrimary() {
         baseUrl: serverBaseUrl.value,
         appId: normalizedAppId.value,
         secret: normalizedSecret.value,
-        openId: PRIMARY_PROJECT_ID,
+        openId: selectedPrimaryId.value,
         container: 'engineContainer',
-        useUE: USE_UE
+        useUE: USE_UE,
+        projectType: projectType.value
       });
       globalStore.firstMotorViewerInstance = instance;
     }
@@ -240,6 +307,10 @@ async function mountPrimary() {
 
 async function mountSecondary() {
   if (loading.secondary) {
+    return;
+  }
+  if (!selectedSecondaryId.value) {
+    statusMessage.value = '请先选择副场景';
     return;
   }
   if (!globalStore.firstMotorViewerInstance?.project) {
@@ -258,9 +329,10 @@ async function mountSecondary() {
       baseUrl: serverBaseUrl.value,
       appId: normalizedAppId.value,
       secret: normalizedSecret.value,
-      openId: SECONDARY_PROJECT_ID,
+      openId: selectedSecondaryId.value,
       container: 'engineContainer2',
-      useUE: USE_UE
+      useUE: USE_UE,
+      projectType: projectType.value
     });
     globalStore.secondMotorViewerInstance = instance;
     const firstViewer = globalStore.firstMotorViewerInstance;
@@ -635,6 +707,49 @@ onBeforeUnmount(async () => {
   resizeCleanup?.();
   await teardownViewers();
 });
+
+async function loadProjects(searchName = '') {
+  if (loading.projects) return;
+  loading.projects = true;
+  try {
+    if (!accessToken.value) {
+      accessToken.value = await fetchToken(
+        serverBaseUrl.value,
+        normalizedAppId.value,
+        normalizedSecret.value
+      );
+    }
+    const list = await fetchProjects(
+      serverBaseUrl.value,
+      accessToken.value,
+      normalizedAppId.value,
+      1,
+      50, // Fetch more to populate dropdown
+      searchName,
+      projectType.value
+    );
+    projects.value = list;
+  } catch (error) {
+    console.error('Failed to load projects', error);
+    statusMessage.value = '获取项目列表失败';
+  } finally {
+    loading.projects = false;
+  }
+}
+
+const handleProjectSearch = debounce((query: string) => {
+  loadProjects(query);
+}, 500);
+
+onMounted(() => {
+  loadProjects();
+});
+
+watch(projectType, () => {
+  selectedPrimaryId.value = '';
+  selectedSecondaryId.value = '';
+  loadProjects();
+});
 </script>
 
 <style scoped>
@@ -795,6 +910,44 @@ onBeforeUnmount(async () => {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.toggle-group {
+  display: flex;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.toggle-group label {
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.toggle-group label.active {
+  background: #3b82f6;
+  color: white;
+  font-weight: 500;
+}
+
+.toggle-group input {
+  display: none;
 }
 
 .controls select,
