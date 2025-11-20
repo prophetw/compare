@@ -65,42 +65,107 @@ async function handleSubmit() {
 .form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+  animation: fadeIn 0.4s ease-out;
 }
 
 label {
   display: flex;
   flex-direction: column;
   font-weight: 600;
-  gap: 6px;
-  color: #0f172a;
+  gap: 8px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  letter-spacing: -0.01em;
 }
 
 input {
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid #cbd5f5;
+  border: 2px solid var(--color-border);
   font-size: 16px;
+  font-family: inherit;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+input:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1), var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
 }
 
 button {
   cursor: pointer;
   border: none;
-  border-radius: 999px;
-  padding: 12px;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border-radius: 12px;
+  padding: 14px 24px;
+  background: var(--gradient-primary);
   color: white;
   font-weight: 700;
-  transition: opacity 0.2s ease;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+button:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .error {
-  color: #dc2626;
+  color: var(--color-error);
   font-size: 14px;
+  font-weight: 500;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 8px;
+  border-left: 3px solid var(--color-error);
+  animation: slideUp 0.3s ease-out;
+  margin: 0;
 }
 </style>
+

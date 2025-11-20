@@ -645,7 +645,7 @@ onBeforeUnmount(async () => {
   background: #000;
   overflow: hidden;
   color: #fff;
-  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
 .viewer-stack {
@@ -714,10 +714,17 @@ onBeforeUnmount(async () => {
   left: 50%;
   width: 4px;
   height: 100%;
-  background-color: #000;
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.8), rgba(124, 58, 237, 0.8));
   cursor: ew-resize;
   z-index: 5;
   transform: translateX(-50%);
+  transition: all var(--transition-base);
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.6);
+}
+
+.slider:hover {
+  width: 6px;
+  box-shadow: 0 0 30px rgba(37, 99, 235, 0.8);
 }
 
 .slider.vertical {
@@ -727,6 +734,12 @@ onBeforeUnmount(async () => {
   top: 50%;
   left: 0;
   transform: translateY(-50%);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.8), rgba(124, 58, 237, 0.8));
+}
+
+.slider.vertical:hover {
+  height: 6px;
+  width: 100%;
 }
 
 .slider::after {
@@ -734,67 +747,118 @@ onBeforeUnmount(async () => {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 16px;
-  height: 16px;
-  background-color: #fff;
-  border: 2px solid #000;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(271, 76%, 53%));
+  border: 2px solid rgba(255, 255, 255, 0.9);
   border-radius: 50%;
   transform: translate(-50%, -50%);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 20px rgba(37, 99, 235, 0.5);
+  transition: all var(--transition-base);
+}
+
+.slider:hover::after {
+  width: 24px;
+  height: 24px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4), 0 0 30px rgba(37, 99, 235, 0.7);
 }
 
 .toolbar {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 8px 12px;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: rgba(0, 0, 0, 0.8);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
   z-index: 10;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .description {
   font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .controls {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .controls select,
 .controls button {
-  height: 28px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  background: transparent;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  padding: 0 10px;
+  padding: 0 14px;
   font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all var(--transition-base);
+  cursor: pointer;
+}
+
+.controls select:hover:not(:disabled),
+.controls button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .controls button:hover:enabled {
-  background: #fff;
-  color: #000;
+  background: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(271, 76%, 53%));
+  border-color: transparent;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+}
+
+.controls button:active:enabled {
+  transform: translateY(0);
 }
 
 .controls button:disabled,
 .controls select:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
+}
+
+.controls select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='white' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
 }
 
 .status {
   position: absolute;
-  bottom: 16px;
-  left: 16px;
+  bottom: 20px;
+  left: 20px;
   margin: 0;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.7);
-  border-radius: 8px;
+  padding: 12px 20px;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
   font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: slideUp 0.3s ease-out;
+  max-width: 400px;
 }
 </style>

@@ -34,33 +34,65 @@ function handleSuccess(payload: { token: string; user: { email: string } }) {
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: fadeIn 0.6s ease-out;
 }
 
 .panel {
-  width: min(480px, 100%);
-  padding: 32px;
+  width: min(520px, 100%);
+  padding: 40px;
   border-radius: 24px;
-  background: white;
-  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.15);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(37, 99, 235, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-primary);
 }
 
 header {
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 h1 {
-  margin: 0 0 8px;
-  font-size: 28px;
+  margin: 0 0 12px;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 p {
   margin: 0;
-  color: #475569;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .message {
-  margin-top: 16px;
+  margin-top: 20px;
   font-weight: 600;
-  color: #059669;
+  color: var(--color-success);
+  padding: 16px 20px;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 12px;
+  border-left: 4px solid var(--color-success);
+  animation: slideUp 0.4s ease-out;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-all;
 }
 </style>
