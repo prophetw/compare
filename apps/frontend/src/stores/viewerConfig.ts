@@ -12,11 +12,11 @@ const CONFIG_STORAGE_KEY = 'viewer-config';
 const CONFIRMED_STORAGE_KEY = 'viewer-config-confirmed';
 
 export const defaultViewerConfig: ViewerConfig = {
-  appName: '浦东大道VR测试',
-  serverUrl: 'https://szsp.suitbim.com.cn:7201',
-  appId: '1a16da7bce17484fb7bb1e3c6b6b692a',
-  secret: 'cfd8efe7467d42d39505c2cafbed2d29',
-  sdkUrl: '/bimv3d/data/proj/page/common/ignore'
+  "appName": "ceshi_1991739705401675776",
+  "serverUrl": "https://szsp.suitbim.com.cn:7201",
+  "appId": "42b6d04dd3ae43d7bb50cf296a696af9",
+  "secret": "19a595ff0c9f4ded806006e4b374e3b3",
+  "sdkUrl": "/bimv3d/data/proj/page/common/ignore"
 };
 
 const persisted = loadPersistedState();
