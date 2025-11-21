@@ -37,6 +37,13 @@
           </label>
         </div>
         
+        <div class="group cloud-render-option">
+          <label class="cloud-render-label">
+            <input type="checkbox" v-model="isCloudRenderingEnabled" />
+            云渲染
+          </label>
+        </div>
+        
         <div class="group">
           <SearchableSelect
             v-model="selectedPrimaryId"
@@ -86,8 +93,6 @@ import SearchableSelect, { type SelectItem } from '@/components/SearchableSelect
 
 type BimEngineNamespace = typeof BimEngine;
 
-const USE_UE = false;
-
 const router = useRouter();
 const { config: viewerConfig, confirmed } = useViewerConfig();
 
@@ -131,6 +136,7 @@ const loading = reactive({
 });
 
 const projectType = ref<'model' | 'scene'>('model');
+const isCloudRenderingEnabled = ref(false);
 const projects = ref<ProjectItem[]>([]);
 const accessToken = ref('');
 const selectedPrimaryId = ref('');
@@ -291,7 +297,7 @@ async function mountPrimary() {
         secret: normalizedSecret.value,
         openId: selectedPrimaryId.value,
         container: 'engineContainer',
-        useUE: USE_UE,
+        useUE: isCloudRenderingEnabled.value,
         projectType: projectType.value
       });
       globalStore.firstMotorViewerInstance = instance;
@@ -331,7 +337,7 @@ async function mountSecondary() {
       secret: normalizedSecret.value,
       openId: selectedSecondaryId.value,
       container: 'engineContainer2',
-      useUE: USE_UE,
+      useUE: isCloudRenderingEnabled.value,
       projectType: projectType.value
     });
     globalStore.secondMotorViewerInstance = instance;
@@ -920,6 +926,22 @@ watch(projectType, () => {
   background: rgba(255, 255, 255, 0.05);
   padding: 4px;
   border-radius: 8px;
+}
+
+.cloud-render-option .cloud-render-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.cloud-render-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: #3b82f6;
+  cursor: pointer;
 }
 
 .toggle-group {

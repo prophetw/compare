@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
   const devServerPort = Number(env.VITE_DEV_PORT ?? 5173);
   const apiTarget = env.VITE_API_TARGET ?? 'http://localhost:3000';
 
+  const basePath = mode === 'production' ? './' : '/';
+
   return {
     plugins: [
       vue(),
@@ -28,11 +30,13 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
+      host: '0.0.0.0',
       port: devServerPort,
       proxy: {
         '/api': apiTarget
       }
     },
+    base: basePath,
     build: {
       outDir: 'dist',
       emptyOutDir: true
