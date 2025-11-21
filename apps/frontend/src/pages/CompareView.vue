@@ -441,9 +441,16 @@ function registerSliderEvents() {
   }
   sliderEventsCleanup?.();
 
+  let cachedRect: DOMRect | null = null;
+  let rafId: number | null = null;
+
   const onPointerDown = (event: PointerEvent) => {
     event.preventDefault();
     isDragging = true;
+    const host = viewerHostRef.value;
+    if (host) {
+      cachedRect = host.getBoundingClientRect();
+    }
     sliderEl.setPointerCapture(event.pointerId);
   };
 
@@ -451,11 +458,17 @@ function registerSliderEvents() {
     if (!isDragging) {
       return;
     }
-    if (sliderDirection.value === 'vertical') {
-      setSliderPosition(event.clientY, true);
-    } else {
-      setSliderPosition(event.clientX, false);
-    }
+    
+    if (rafId) return;
+
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      if (sliderDirection.value === 'vertical') {
+        setSliderPosition(event.clientY, true, cachedRect || undefined);
+      } else {
+        setSliderPosition(event.clientX, false, cachedRect || undefined);
+      }
+    });
   };
 
   const stopDragging = (event: PointerEvent) => {
@@ -463,6 +476,11 @@ function registerSliderEvents() {
       return;
     }
     isDragging = false;
+    cachedRect = null;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
     sliderEl.releasePointerCapture(event.pointerId);
   };
 
@@ -476,6 +494,9 @@ function registerSliderEvents() {
     sliderEl.removeEventListener('pointermove', onPointerMove);
     sliderEl.removeEventListener('pointerup', stopDragging);
     sliderEl.removeEventListener('pointercancel', stopDragging);
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+    }
   };
 }
 
@@ -494,21 +515,21 @@ function refreshSliderPosition() {
   const rect = host.getBoundingClientRect();
   if (sliderDirection.value === 'vertical') {
     const y = rect.top + (sliderPercent.value / 100) * rect.height;
-    setSliderPosition(y, true);
+    setSliderPosition(y, true, rect);
   } else {
     const x = rect.left + (sliderPercent.value / 100) * rect.width;
-    setSliderPosition(x, false);
+    setSliderPosition(x, false, rect);
   }
 }
 
-function setSliderPosition(clientPos: number, isVerticalDirection: boolean) {
+function setSliderPosition(clientPos: number, isVerticalDirection: boolean, providedRect?: DOMRect) {
   const host = viewerHostRef.value;
   const sliderEl = sliderRef.value;
   const secondContainer = secondContainerRef.value;
   if (!host || !sliderEl || !secondContainer) {
     return;
   }
-  const rect = host.getBoundingClientRect();
+  const rect = providedRect || host.getBoundingClientRect();
   let percentage = 0;
 
   if (isVerticalDirection) {
@@ -829,17 +850,10 @@ watch(projectType, () => {
   left: 50%;
   width: 4px;
   height: 100%;
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.8), rgba(124, 58, 237, 0.8));
+  background: rgba(255, 255, 255, 0.65);
   cursor: ew-resize;
   z-index: 5;
   transform: translateX(-50%);
-  transition: all var(--transition-base);
-  box-shadow: 0 0 20px rgba(37, 99, 235, 0.6);
-}
-
-.slider:hover {
-  width: 6px;
-  box-shadow: 0 0 30px rgba(37, 99, 235, 0.8);
 }
 
 .slider.vertical {
@@ -849,12 +863,7 @@ watch(projectType, () => {
   top: 50%;
   left: 0;
   transform: translateY(-50%);
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.8), rgba(124, 58, 237, 0.8));
-}
-
-.slider.vertical:hover {
-  height: 6px;
-  width: 100%;
+  background: rgba(255, 255, 255, 0.65);
 }
 
 .slider::after {
@@ -862,20 +871,12 @@ watch(projectType, () => {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 20px;
-  height: 20px;
-  background: linear-gradient(135deg, hsl(221, 83%, 53%), hsl(271, 76%, 53%));
-  border: 2px solid rgba(255, 255, 255, 0.9);
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(0, 0, 0, 0.2);
   transform: translate(-50%, -50%);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 20px rgba(37, 99, 235, 0.5);
-  transition: all var(--transition-base);
-}
-
-.slider:hover::after {
-  width: 24px;
-  height: 24px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4), 0 0 30px rgba(37, 99, 235, 0.7);
 }
 
 .toolbar {
