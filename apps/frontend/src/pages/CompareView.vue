@@ -303,6 +303,7 @@ async function mountPrimary() {
       globalStore.firstMotorViewerInstance = instance;
     }
     await instance.openProject();
+    updateCloudSplitClip();
     statusMessage.value = '主场景已加载';
   } catch (error) {
     statusMessage.value = getErrorMessage(error);
@@ -352,6 +353,7 @@ async function mountSecondary() {
 
     await instance.openProject();
     window.clearInterval(adjustInterval);
+    updateCloudSplitClip();
 
     if (firstViewer?.viewer) {
       globalStore.cameraSyncEvt = syncCameras(firstViewer, instance);
@@ -438,6 +440,7 @@ function disableSlider() {
   resizeCleanup = null;
   isDragging = false;
   clearClipPaths();
+  resetCloudSplitClip();
 }
 
 function registerSliderEvents() {
@@ -588,6 +591,47 @@ function clearClipPaths() {
   ueContainer && (ueContainer.style.clipPath = '');
 }
 
+function updateCloudSplitClip() {
+  if (comparisonMode.value !== 'split') {
+    return;
+  }
+  applySplitClip(globalStore.firstMotorViewerInstance, true);
+  applySplitClip(globalStore.secondMotorViewerInstance, false);
+}
+
+function applySplitClip(instance: MotorViewerInstance | null | undefined, isPrimary: boolean) {
+  if (!instance?.isUseUE) {
+    return;
+  }
+  const ueContainer = instance.viewer?.ueViewer?.ueContainer as HTMLElement | undefined;
+  if (!ueContainer) {
+    return;
+  }
+  ueContainer.style.clipPath = getSplitClipValue(isPrimary);
+  ueContainer.style.pointerEvents = 'auto';
+}
+
+function getSplitClipValue(isPrimary: boolean) {
+  const half = '50%';
+  const isVertical = sliderDirection.value === 'vertical';
+  if (isVertical) {
+    return isPrimary ? `inset(0 0 ${half} 0)` : `inset(${half} 0 0 0)`;
+  }
+  return isPrimary ? `inset(0 ${half} 0 0)` : `inset(0 0 0 ${half})`;
+}
+
+function resetCloudSplitClip() {
+  clearCloudViewerClip(globalStore.firstMotorViewerInstance);
+  clearCloudViewerClip(globalStore.secondMotorViewerInstance);
+}
+
+function clearCloudViewerClip(instance: MotorViewerInstance | null | undefined) {
+  const ueContainer = instance?.viewer?.ueViewer?.ueContainer as HTMLElement | undefined;
+  if (ueContainer) {
+    ueContainer.style.clipPath = '';
+  }
+}
+
 function adjustViewerCss(viewer1: MotorViewerInstance, viewer2: MotorViewerInstance) {
   if (viewer1.viewer?.ueViewer && viewer1.isUseUE && viewer1.viewer.ueViewer.ueContainer) {
     viewer1.viewer.ueViewer.ueContainer.style.width = '100%';
@@ -712,20 +756,28 @@ function syncCameras(viewer1: MotorViewerInstance, viewer2: MotorViewerInstance)
 
 watch(sliderDirection, async () => {
   if (!sliderVisible.value) {
+    if (comparisonMode.value === 'split') {
+      updateCloudSplitClip();
+    }
     return;
   }
   sliderPercent.value = 50;
   await nextTick();
   refreshSliderPosition();
+  if (comparisonMode.value === 'split') {
+    updateCloudSplitClip();
+  }
 });
 
 watch(comparisonMode, async (mode) => {
   if (mode === 'overlay') {
+    resetCloudSplitClip();
     if (globalStore.secondMotorViewerInstance?.project) {
       await enableSlider();
     }
   } else {
     disableSlider();
+    updateCloudSplitClip();
   }
 });
 
